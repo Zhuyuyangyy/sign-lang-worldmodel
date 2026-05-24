@@ -1,0 +1,48 @@
+# Sign Language World Model
+# ==========================
+# Config for Continuous Latent World Model (CLWM) + sign translation
+
+model:
+  name: "SignLanguageWorldModel"
+  obs_dim: 2048          # I3D visual feature dimension
+  latent_dim: 256
+  hidden_dim: 512
+  num_heads: 8
+  num_layers: 8          # temporal transformer layers
+  num_codes: 8192        # VQ-VAE codebook size
+  num_glosses: 100       # sign language gloss classes
+  dropout: 0.1
+
+data:
+  dataset: "autsl"       # AUTSL, WLASL, or custom
+  video_fps: 30
+  num_frames: 30         # frames per sample
+  resize_h: 224
+  resize_w: 224
+  pretrained_i3d: true
+  data_dir: "data/signlang"
+
+training:
+  epochs: 100
+  batch_size: 16
+  lr: 1.0e-4
+  weight_decay: 1.0e-5
+  max_grad_norm: 1.0
+  beta_kl: 0.1           # KL weight for beta-VAE
+  commitment_cost: 0.25   # VQ-VAE commitment penalty
+  accumulation_steps: 4   # gradient accumulation
+  device: "cuda"
+  num_workers: 4
+
+world_model:
+  free_bits: 0.5         # KL free bits to prevent collapse
+  posterior_blend: 0.7   # blend weight for posterior update
+
+generation:
+  num_steps: 30          # imagination rollout steps
+  temperature: 1.0
+
+logging:
+  exp_dir: "experiments/signlang"
+  log_interval: 50
+  save_interval: 10
