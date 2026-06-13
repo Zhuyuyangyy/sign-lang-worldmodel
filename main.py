@@ -49,6 +49,11 @@ class SignVideoDataset(Dataset):
     """
     Placeholder dataset for sign language video features.
 
+    DISCLAIMER: This dataset generates SYNTHETIC RANDOM NOISE, not real
+    sign language features. It is intended solely for pipeline validation
+    and smoke testing. Any training results on this data are meaningless
+    and should NOT be reported as model performance.
+
     In production, replace with real I3D / SlowFast feature extraction
     from AUTSL, WLASL, or similar datasets.
 
@@ -211,10 +216,11 @@ def train(
             wm_loss_dict = model.world_model.world_loss(
                 videos,
                 out["latent"],
-                videos,  # obs_pred placeholder
+                out.get("world_loss", videos),  # obs_pred from world model
                 out["z_mean"],
                 out["z_logvar"],
-                out.get("z_prior", out["z_mean"]),
+                out["z_prior_mean"],
+                out["z_prior_logvar"],
             )
             wm_loss = wm_loss_dict["total_loss"]
 

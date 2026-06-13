@@ -1,0 +1,177 @@
+# Sign Language World Model Docker Compose Configuration
+
+version: '3.8'
+
+services:
+  # Training service
+  train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: signlang-train
+    volumes:
+      - ./data:/app/data
+      - ./experiments:/app/experiments
+      - ./configs:/app/configs
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      python main.py
+      --config configs/default.yaml
+      --exp-dir experiments
+    restart: unless-stopped
+
+  # Development service
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: signlang-dev
+    volumes:
+      - .:/app
+      - ~/.ssh:/home/appuser/.ssh:ro
+      - ~/.gitconfig:/home/appuser/.gitconfig:ro
+    ports:
+      - "8888:8888"  # Jupyter
+      - "6006:6006"  # TensorBoard
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      bash -c "pip install -e . &&
+      jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root"
+    restart: unless-stopped
+
+  # Testing service
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: signlang-test
+    volumes:
+      - .:/app
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      bash -c "pip install -e . &&
+      pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing"
+    restart: "no"
+
+  # TensorBoard service
+  tensorboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: signlang-tensorboard
+    volumes:
+      - ./experiments:/app/experiments
+    ports:
+      - "6006:6006"
+    command: tensorboard --logdir=/app/experiments --host=0.0.0.0 --port=6006
+    restart: unless-stopped
+
+  # API service (optional)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: signlang-api
+    volumes:
+      - ./data:/app/data
+      - ./experiments:/app/experiments
+    ports:
+      - "8000:8000"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      python -c "
+      from src.signlang.world_model.signer_world_model import SignLanguageWorldModel
+      import torch
+      model = SignLanguageWorldModel()
+      print('API ready')
+      "
+    restart: unless-stopped
+
+  # Model serving (TorchServe)
+  serve:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: signlang-serve
+    volumes:
+      - ./models:/app/models
+      - ./experiments:/app/experiments
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+      - "8082:8082"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      bash -c "
+      torchserve --start
+      --model-store /app/models
+      --models signlang=signlang.mar
+      --ts-config /app/configs/torchserve.properties
+      "
+    restart: unless-stopped
+
+# Networks
+networks:
+  default:
+    name: signlang-network
+    driver: bridge
+
+# Volumes
+volumes:
+  data:
+    driver: local
+  experiments:
+    driver: local
+  models:
+    driver: local
